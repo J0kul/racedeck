@@ -37,6 +37,8 @@ function publicPlayer(p: PlayerRow, selfUserId: string) {
     skipNextTurn: p.skipNextTurn,
     turtleTurns: p.turtleTurns,
     cardsPlayedThisTurn: p.cardsPlayedThisTurn,
+    shieldActive: p.shieldActive,
+    nitroActive: p.nitroActive,
     finished: p.finished,
     finishRank: p.finishRank,
     isSelf,

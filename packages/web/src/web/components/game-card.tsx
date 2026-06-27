@@ -1,11 +1,18 @@
 import { motion } from "motion/react";
 import { CARD_META, type CardType } from "../lib/game";
-import { Zap, Ban, Sparkles } from "lucide-react";
+import { Zap, Ban, Sparkles, ArrowLeftRight, Shield, Bomb, Gauge, Landmark } from "lucide-react";
 
-function Icon({ type }: { type: CardType }) {
-  if (type === "advance") return <Zap size={26} strokeWidth={2.5} />;
-  if (type === "block") return <Ban size={26} strokeWidth={2.5} />;
-  return <Sparkles size={26} strokeWidth={2.5} />;
+function Icon({ type, size = 26 }: { type: CardType; size?: number }) {
+  const s = size;
+  if (type === "advance")  return <Zap size={s} strokeWidth={2.5} />;
+  if (type === "block")    return <Ban size={s} strokeWidth={2.5} />;
+  if (type === "mystery")  return <Sparkles size={s} strokeWidth={2.5} />;
+  if (type === "swap")     return <ArrowLeftRight size={s} strokeWidth={2.5} />;
+  if (type === "shield")   return <Shield size={s} strokeWidth={2.5} />;
+  if (type === "sabotage") return <Bomb size={s} strokeWidth={2.5} />;
+  if (type === "nitro")    return <Gauge size={s} strokeWidth={2.5} />;
+  if (type === "tax")      return <Landmark size={s} strokeWidth={2.5} />;
+  return <Sparkles size={s} strokeWidth={2.5} />;
 }
 
 export function GameCard({
@@ -24,7 +31,6 @@ export function GameCard({
   total?: number;
 }) {
   const meta = CARD_META[type];
-  // fan layout: rotate cards based on position relative to center
   const mid = (total - 1) / 2;
   const rot = (index - mid) * 4;
   const lift = -Math.abs(index - mid) * 6;
@@ -36,12 +42,12 @@ export function GameCard({
       onClick={onClick}
       initial={{ y: 80, opacity: 0, rotate: rot }}
       animate={{
-        y: selected ? -42 + lift : lift,
-        opacity: disabled ? 0.55 : 1,
+        y: selected ? -52 + lift : lift,
+        opacity: disabled ? 0.4 : 1,
         rotate: selected ? 0 : rot,
-        scale: selected ? 1.06 : 1,
+        scale: selected ? 1.08 : 1,
       }}
-      whileHover={disabled ? {} : { y: -28 + lift, rotate: 0, scale: 1.05, zIndex: 50 }}
+      whileHover={disabled ? {} : { y: -32 + lift, rotate: 0, scale: 1.06, zIndex: 50 }}
       transition={{ type: "spring", stiffness: 320, damping: 24 }}
       className="card-shadow relative shrink-0 rounded-2xl"
       style={{
@@ -50,21 +56,23 @@ export function GameCard({
         marginLeft: index === 0 ? 0 : -22,
         cursor: disabled ? "not-allowed" : "pointer",
         zIndex: selected ? 60 : 10 + index,
-        background: `linear-gradient(165deg, ${meta.color}22 0%, #0f141d 60%)`,
+        background: selected
+          ? `linear-gradient(165deg, ${meta.color}33 0%, #0f141d 55%)`
+          : `linear-gradient(165deg, ${meta.color}18 0%, #0f141d 60%)`,
         border: `2px solid ${selected ? meta.color : "#26344a"}`,
         boxShadow: selected
-          ? `0 0 0 3px ${meta.glow}, 0 10px 0 rgba(0,0,0,.55), 0 24px 40px -10px ${meta.glow}`
+          ? `0 0 0 3px ${meta.glow}, 0 10px 0 rgba(0,0,0,.55), 0 28px 48px -10px ${meta.glow}`
           : undefined,
       }}
     >
-      {/* corner value */}
+      {/* corner label */}
       <div className="absolute left-2 top-2 flex flex-col items-center leading-none">
-        <span className="font-pixel text-[15px]" style={{ color: meta.color }}>
+        <span className="font-pixel text-[14px]" style={{ color: meta.color }}>
           {meta.short}
         </span>
       </div>
       <div className="absolute right-2 top-2.5" style={{ color: meta.color }}>
-        <Icon type={type} />
+        <Icon type={type} size={22} />
       </div>
 
       {/* center emblem */}
@@ -78,13 +86,10 @@ export function GameCard({
           }}
         >
           <div style={{ transform: "scale(1.5)" }}>
-            <Icon type={type} />
+            <Icon type={type} size={22} />
           </div>
         </div>
-        <div
-          className="font-pixel text-[9px] leading-relaxed"
-          style={{ color: meta.color }}
-        >
+        <div className="font-pixel text-[9px] leading-relaxed" style={{ color: meta.color }}>
           {meta.label}
         </div>
       </div>
@@ -93,6 +98,16 @@ export function GameCard({
       <div className="absolute inset-x-2 bottom-2 text-[9px] leading-snug text-ink-dim">
         {meta.desc}
       </div>
+
+      {/* selected pulse ring */}
+      {selected && (
+        <motion.div
+          className="pointer-events-none absolute inset-0 rounded-2xl"
+          style={{ border: `2px solid ${meta.color}` }}
+          animate={{ opacity: [0.6, 1, 0.6] }}
+          transition={{ repeat: Infinity, duration: 1.2 }}
+        />
+      )}
     </motion.button>
   );
 }

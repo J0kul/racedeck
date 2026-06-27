@@ -42,43 +42,61 @@ export async function resolveCard(
 
   let stolenCard: Card | undefined;
 
+  // Helper: check if a target has shield and consume it
+  async function checkShield(targetId: string): Promise<boolean> {
+    const target = players.find((p) => p.id === targetId);
+    if (!target || !target.shieldActive) return false;
+    await db.update(schema.players).set({ shieldActive: false }).where(eq(schema.players.id, targetId));
+    await logEvent(gameId, {
+      type: "shield",
+      actorPlayerId: targetId,
+      message: `🛡️ ${target.name}'s SHIELD absorbs the attack!`,
+    });
+    return true;
+  }
+
   if (card.type === "advance") {
     const newPos = Math.min(me.position + 2, game.trackLength);
     await db.update(schema.players).set({ position: newPos }).where(eq(schema.players.id, me.id));
     await logEvent(gameId, {
       type: "advance",
       actorPlayerId: me.id,
-      message: `${me.name} plays +2 ADVANCE and surges to ${newPos}!`,
+      message: `${me.name} plays +2 ADVANCE and surges to square ${newPos}!`,
       payload: { to: newPos },
     });
+
   } else if (card.type === "block") {
     const target = players.find((p) => p.id === targetPlayerId);
     if (!target || target.id === me.id || target.finished)
       return { ok: false, message: "Pick a valid rival to block." };
-    await db.update(schema.players).set({ skipNextTurn: true }).where(eq(schema.players.id, target.id));
-    await logEvent(gameId, {
-      type: "block",
-      actorPlayerId: me.id,
-      targetPlayerId: target.id,
-      message: `${me.name} BLOCKS ${target.name} — their next turn is gone!`,
-    });
+    const blocked = await checkShield(target.id);
+    if (!blocked) {
+      await db.update(schema.players).set({ skipNextTurn: true }).where(eq(schema.players.id, target.id));
+      await logEvent(gameId, {
+        type: "block",
+        actorPlayerId: me.id,
+        targetPlayerId: target.id,
+        message: `${me.name} BLOCKS ${target.name} — their next turn is gone!`,
+      });
+    }
+
   } else if (card.type === "mystery") {
     const outcome = rollMystery();
     if (outcome.kind === "turtle") {
       const target = players.find((p) => p.id === targetPlayerId);
       if (!target || target.id === me.id || target.finished)
         return { ok: false, message: "Pick a valid rival for the mystery." };
-      await db
-        .update(schema.players)
-        .set({ turtleTurns: TURTLE_DURATION })
-        .where(eq(schema.players.id, target.id));
-      await logEvent(gameId, {
-        type: "turtle",
-        actorPlayerId: me.id,
-        targetPlayerId: target.id,
-        message: `🐢 MYSTERY! ${me.name} turns ${target.name}'s horse into a turtle for ${TURTLE_DURATION} turns!`,
-        payload: { effect: "turtle", turns: TURTLE_DURATION },
-      });
+      const blocked = await checkShield(target.id);
+      if (!blocked) {
+        await db.update(schema.players).set({ turtleTurns: TURTLE_DURATION }).where(eq(schema.players.id, target.id));
+        await logEvent(gameId, {
+          type: "turtle",
+          actorPlayerId: me.id,
+          targetPlayerId: target.id,
+          message: `🐢 MYSTERY! ${me.name} turns ${target.name}'s horse into a turtle for ${TURTLE_DURATION} turns!`,
+          payload: { effect: "turtle", turns: TURTLE_DURATION },
+        });
+      }
     } else {
       let target = players.find((p) => p.id === targetPlayerId && p.id !== me.id);
       const candidates = players.filter((p) => p.id !== me.id && parseHand(p).length > 0);
@@ -106,6 +124,81 @@ export async function resolveCard(
         });
       }
     }
+
+  } else if (card.type === "swap") {
+    const target = players.find((p) => p.id === targetPlayerId);
+    if (!target || target.id === me.id || target.finished)
+      return { ok: false, message: "Pick a valid rival to swap with." };
+    const myPos = me.position;
+    const theirPos = target.position;
+    await db.update(schema.players).set({ position: theirPos }).where(eq(schema.players.id, me.id));
+    await db.update(schema.players).set({ position: myPos }).where(eq(schema.players.id, target.id));
+    await logEvent(gameId, {
+      type: "swap",
+      actorPlayerId: me.id,
+      targetPlayerId: target.id,
+      message: `🔀 SWAP! ${me.name} and ${target.name} swap positions on the track!`,
+      payload: { myPos: theirPos, theirPos: myPos },
+    });
+
+  } else if (card.type === "shield") {
+    await db.update(schema.players).set({ shieldActive: true }).where(eq(schema.players.id, me.id));
+    await logEvent(gameId, {
+      type: "shield",
+      actorPlayerId: me.id,
+      message: `🛡️ ${me.name} raises a SHIELD — the next attack against them is blocked!`,
+    });
+
+  } else if (card.type === "sabotage") {
+    const target = players.find((p) => p.id === targetPlayerId);
+    if (!target || target.id === me.id || target.finished)
+      return { ok: false, message: "Pick a valid rival to sabotage." };
+    const blocked = await checkShield(target.id);
+    if (!blocked) {
+      const newPos = Math.max(0, target.position - 3);
+      await db.update(schema.players).set({ position: newPos }).where(eq(schema.players.id, target.id));
+      await logEvent(gameId, {
+        type: "sabotage",
+        actorPlayerId: me.id,
+        targetPlayerId: target.id,
+        message: `💥 SABOTAGE! ${me.name} knocks ${target.name} back 3 squares to ${newPos}!`,
+        payload: { to: newPos },
+      });
+    }
+
+  } else if (card.type === "nitro") {
+    await db.update(schema.players).set({ nitroActive: true }).where(eq(schema.players.id, me.id));
+    await logEvent(gameId, {
+      type: "nitro",
+      actorPlayerId: me.id,
+      message: `⚡ NITRO! ${me.name}'s next move will be double speed!`,
+    });
+
+  } else if (card.type === "tax") {
+    const rivals = players.filter((p) => p.id !== me.id && !p.finished);
+    let taxed = 0;
+    for (const rival of rivals) {
+      const rHand = parseHand(rival);
+      if (rHand.length === 0) continue;
+      // shield absorbs tax too
+      if (rival.shieldActive) {
+        await db.update(schema.players).set({ shieldActive: false }).where(eq(schema.players.id, rival.id));
+        await logEvent(gameId, {
+          type: "shield",
+          actorPlayerId: rival.id,
+          message: `🛡️ ${rival.name}'s SHIELD deflects the TAX!`,
+        });
+        continue;
+      }
+      rHand.splice(Math.floor(Math.random() * rHand.length), 1);
+      await db.update(schema.players).set({ hand: JSON.stringify(rHand) }).where(eq(schema.players.id, rival.id));
+      taxed++;
+    }
+    await logEvent(gameId, {
+      type: "tax",
+      actorPlayerId: me.id,
+      message: `💸 TAX COLLECTOR! ${me.name} forces ${taxed} rival${taxed !== 1 ? "s" : ""} to discard a card!`,
+    });
   }
 
   // remove played card, add stolen, draw replacement; track cards played this turn
@@ -154,20 +247,23 @@ export async function applyBaseStep(gameId: string, player: PlayerRow) {
   const game = await getGame(gameId);
   if (!game) return;
   let turtleTurns = player.turtleTurns;
-  const step = baseStepFor({ baseStep: game.baseStep, turtleTurns });
+  const step = baseStepFor({ baseStep: game.baseStep, turtleTurns, nitroActive: player.nitroActive });
   const newPos = Math.min(player.position + step, game.trackLength);
   if (turtleTurns > 0) turtleTurns -= 1;
 
   await db
     .update(schema.players)
-    .set({ position: newPos, turtleTurns })
+    .set({ position: newPos, turtleTurns, nitroActive: false }) // consume nitro
     .where(eq(schema.players.id, player.id));
 
   if (step > 0) {
+    const boosted = player.nitroActive;
     await logEvent(gameId, {
       type: "move",
       actorPlayerId: player.id,
-      message: `${player.name} trots ${step} forward.`,
+      message: boosted
+        ? `${player.name} NITRO-BOOSTS ${step} squares to ${newPos}! ⚡`
+        : `${player.name} trots ${step} forward to ${newPos}.`,
       payload: { to: newPos },
     });
   } else if (player.turtleTurns > 0) {
@@ -214,13 +310,12 @@ export async function advanceTurn(gameId: string) {
   const nextPid = order[idx];
   const np = (await getPlayers(gameId)).find((x) => x.id === nextPid);
   if (np) {
-    // reset card-play counter for the incoming player
+    // reset card-play counter and shield for the incoming player's turn
     await db.update(schema.players)
       .set({ cardsPlayedThisTurn: 0 })
       .where(eq(schema.players.id, np.id));
     await logEvent(gameId, { type: "turn", actorPlayerId: np.id, message: `${np.name}'s turn.` });
   }
-  // stamp the turn clock so the 60s timer knows when this turn began
   await stampTurnStart(gameId);
 }
 

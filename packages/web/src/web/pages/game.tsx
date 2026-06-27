@@ -294,18 +294,55 @@ export default function GamePage() {
         {/* hand dock */}
         <div className="mt-2">
           {actionError && <p className="mb-1 text-center text-sm text-rose">{actionError}</p>}
-          {needsTarget && selectedCard && isMyTurn && (
-            <p className="mb-1 text-center text-sm text-gold">Pick a rival above to {selected?.type === "block" ? "block" : "hit with the mystery"} →</p>
-          )}
-          {isMyTurn && (
-            <p className="mb-1 text-center text-xs text-ink-dim">
-              Cards this turn:{" "}
-              <span className={cardsRemaining === 0 ? "text-rose font-bold" : "text-mint font-bold"}>
-                {cardsRemaining} / 2 remaining
-              </span>
-            </p>
-          )}
-          <div className="flex min-h-[150px] items-end justify-center gap-1 pt-6">
+
+          {/* Hearthstone-style action bar */}
+          <div className="mb-1 flex min-h-[28px] items-center justify-center gap-3">
+            {isMyTurn && !selectedCard && !needsTarget && (
+              <p className="text-xs text-ink-dim">
+                Cards:{" "}
+                <span className={cardsRemaining === 0 ? "text-rose font-bold" : "text-mint font-bold"}>
+                  {cardsRemaining} / 2
+                </span>
+                {" "}remaining
+              </p>
+            )}
+            {isMyTurn && selectedCard && !needsTarget && (
+              <AnimatePresence>
+                <motion.div
+                  key="play-bar"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  className="flex items-center gap-2"
+                >
+                  <button
+                    onClick={() => playMut.mutate({ cardId: selectedCard! })}
+                    disabled={playMut.isPending}
+                    className="btn btn-mint px-5 py-1.5 text-sm font-bold"
+                    style={{ boxShadow: `0 0 14px ${CARD_META[selected!.type].glow}` }}
+                  >
+                    {playMut.isPending ? <Loader2 className="animate-spin" size={14} /> : `Play ${CARD_META[selected!.type].label}`}
+                  </button>
+                  <button onClick={() => setSelectedCard(null)} className="btn btn-ghost text-xs">Cancel</button>
+                </motion.div>
+              </AnimatePresence>
+            )}
+            {isMyTurn && selectedCard && needsTarget && (
+              <motion.p
+                key="target-hint"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-sm text-gold font-semibold"
+              >
+                🎯 Pick a rival on the track to{" "}
+                {selected?.type === "block" ? "block" : selected?.type === "swap" ? "swap with" : selected?.type === "sabotage" ? "sabotage" : "target"} →
+                <button onClick={() => setSelectedCard(null)} className="ml-2 text-xs text-ink-dim underline">cancel</button>
+              </motion.p>
+            )}
+          </div>
+
+          {/* card fan */}
+          <div className="flex min-h-[160px] items-end justify-center gap-1 pt-8">
             <AnimatePresence>
               {(me?.hand ?? []).map((card, i) => (
                 <GameCard
@@ -317,13 +354,8 @@ export default function GamePage() {
                   disabled={!isMyTurn || playMut.isPending || cardLimitReached}
                   onClick={() => {
                     if (!isMyTurn || cardLimitReached) return;
-                    if (CARD_META[card.type].needsTarget) {
-                      setSelectedCard(selectedCard === card.id ? null : card.id);
-                    } else {
-                      // advance: play immediately
-                      setSelectedCard(card.id);
-                      playMut.mutate({ cardId: card.id });
-                    }
+                    // toggle selection — clicking the same card again deselects
+                    setSelectedCard(selectedCard === card.id ? null : card.id);
                   }}
                 />
               ))}
@@ -336,14 +368,11 @@ export default function GamePage() {
               disabled={!isMyTurn || endTurnMut.isPending || playMut.isPending}
               className="btn btn-mint"
             >
-              {endTurnMut.isPending ? <Loader2 className="animate-spin" size={16} /> : "End turn → move +"}
+              {endTurnMut.isPending ? <Loader2 className="animate-spin" size={16} /> : `End turn → +${data.game.baseStep}${me?.nitroActive ? "×2 ⚡" : ""}`}
             </button>
-            {selectedCard && (
-              <button onClick={() => setSelectedCard(null)} className="btn btn-ghost text-sm">Cancel</button>
-            )}
           </div>
           <p className="mt-2 text-center text-xs text-ink-dim">
-            Tip: cards are bonus actions (max 2/turn). Advance = +2 squares. Ending your turn moves your horse <b>+{data.game.baseStep}</b> (turtled horses stay put).
+            Select a card to preview it, then hit Play. Max 2 cards/turn. Ending your turn moves your horse <b>+{data.game.baseStep}</b>{me?.nitroActive ? " ×2 ⚡ (NITRO active!)" : ""}.
           </p>
         </div>
       </div>

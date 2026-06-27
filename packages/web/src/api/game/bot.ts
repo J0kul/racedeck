@@ -12,7 +12,6 @@ export function pickBotName(used: Set<string>): string {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// The leader = the non-finished rival closest to the finish (ties broken randomly).
 function leaderOf(players: PlayerRow[], selfId: string): PlayerRow | null {
   const rivals = players.filter((p) => p.id !== selfId && !p.finished);
   if (rivals.length === 0) return null;
@@ -21,10 +20,7 @@ function leaderOf(players: PlayerRow[], selfId: string): PlayerRow | null {
   return best;
 }
 
-// Decide and play cards for one bot's turn, then end the turn.
 async function runOneBotTurn(gameId: string, botId: string) {
-  // A bot may play multiple cards in a turn (e.g. block the leader AND +4 itself).
-  // Ruthless: keep playing while it has impactful cards, cap to avoid loops.
   for (let i = 0; i < 2; i++) {
     const game = await getGame(gameId);
     if (!game || game.status !== "playing") return;
@@ -33,7 +29,7 @@ async function runOneBotTurn(gameId: string, botId: string) {
     if (!me || me.finished) break;
 
     const order = parseTurnOrder(game);
-    if (order[game.currentTurnIndex] !== botId) return; // not our turn anymore
+    if (order[game.currentTurnIndex] !== botId) return;
 
     const hand = parseHand(me);
     if (hand.length === 0) break;
@@ -42,9 +38,16 @@ async function runOneBotTurn(gameId: string, botId: string) {
     const distToFinish = game.trackLength - me.position;
     const leaderAhead = leader ? leader.position >= me.position : false;
 
-    // Priority 1: if +4 wins or closes the gap meaningfully, take it.
+    // Priority 1: nitro if close to finish or leading
+    const nitro = hand.find((c) => c.type === "nitro");
+    if (nitro && (distToFinish <= 3 || !leaderAhead)) {
+      const r = await resolveCard(gameId, me, nitro.id, null);
+      if (r.ok) continue;
+    }
+
+    // Priority 2: +2 advance wins or is very useful
     const advance = hand.find((c) => c.type === "advance");
-    if (advance && (distToFinish <= 4 || !leaderAhead || i === 0)) {
+    if (advance && (distToFinish <= 2 || !leaderAhead || i === 0)) {
       const r = await resolveCard(gameId, me, advance.id, null);
       if (r.ok) {
         const g = await getGame(gameId);
@@ -53,21 +56,49 @@ async function runOneBotTurn(gameId: string, botId: string) {
       }
     }
 
-    // Priority 2: sabotage the leader. Block if leader is about to win or clearly ahead.
+    // Priority 3: sabotage the leader (hits harder than block)
+    const sabotage = hand.find((c) => c.type === "sabotage");
+    if (sabotage && leader && leaderAhead) {
+      const r = await resolveCard(gameId, me, sabotage.id, leader.id);
+      if (r.ok) continue;
+    }
+
+    // Priority 4: block the leader
     const block = hand.find((c) => c.type === "block");
     if (block && leader && leaderAhead) {
       const r = await resolveCard(gameId, me, block.id, leader.id);
       if (r.ok) continue;
     }
 
-    // Priority 3: mystery on the leader (turtle them or steal).
+    // Priority 5: swap if leader is well ahead and swap helps
+    const swap = hand.find((c) => c.type === "swap");
+    if (swap && leader && leader.position - me.position >= 4) {
+      const r = await resolveCard(gameId, me, swap.id, leader.id);
+      if (r.ok) continue;
+    }
+
+    // Priority 6: tax (AoE — always good)
+    const tax = hand.find((c) => c.type === "tax");
+    if (tax) {
+      const r = await resolveCard(gameId, me, tax.id, null);
+      if (r.ok) continue;
+    }
+
+    // Priority 7: mystery on leader
     const mystery = hand.find((c) => c.type === "mystery");
     if (mystery && leader) {
       const r = await resolveCard(gameId, me, mystery.id, leader.id);
       if (r.ok) continue;
     }
 
-    // Priority 4: leftover advance even if leading, to extend the lead.
+    // Priority 8: shield if in the lead (protect the position)
+    const shield = hand.find((c) => c.type === "shield");
+    if (shield && !leaderAhead) {
+      const r = await resolveCard(gameId, me, shield.id, null);
+      if (r.ok) continue;
+    }
+
+    // Priority 9: leftover advance
     if (advance) {
       const r = await resolveCard(gameId, me, advance.id, null);
       if (r.ok) {
@@ -77,17 +108,14 @@ async function runOneBotTurn(gameId: string, botId: string) {
       }
     }
 
-    // Nothing impactful left this turn.
     break;
   }
 
-  // End the bot's turn (applies base step + advances pointer).
   const players = await getPlayers(gameId);
   const me = players.find((p) => p.id === botId);
   if (me) await endTurnForPlayer(gameId, me);
 }
 
-// Drive all consecutive bot turns. Returns when a human is up or game ends.
 export async function runBots(gameId: string) {
   for (let guard = 0; guard < 30; guard++) {
     const game = await getGame(gameId);
@@ -97,9 +125,8 @@ export async function runBots(gameId: string) {
     const currentId = order[game.currentTurnIndex];
     const current = players.find((p) => p.id === currentId);
     if (!current) return;
-    if (!current.isBot) return; // human's turn — stop
+    if (!current.isBot) return;
     if (current.finished) {
-      // shouldn't happen (advanceTurn skips finished), safety net
       await endTurnForPlayer(gameId, current);
       continue;
     }

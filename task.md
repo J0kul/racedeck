@@ -1,28 +1,33 @@
-# RaceDeck — build progress
+# Task: History fix + Hearthstone card UX + New cards
 
-## Decisions
-- Online MP, accounts (Better Auth email/pw), 2-4 players, 20-square track.
-- Base step = +1 on your turn (end-turn applies it). Cards add strategy.
-- Cards: advance(+4), block(skip next turn of target), mystery(turtle 2 turns OR steal card).
-- Real-time = short polling ~1s of GET /api/games/:id.
-- Visual: Balatro cards (juicy, lightly pixelated, hard offset shadows) + Stake UI chrome (dark elegant). Fonts: Press Start 2P (sparingly) + Sora.
+## 1. History feed fix
+- EventLog: show only last 5 events by default
+- "See more" toggle reveals full scrollable list
+- No layout-pushing: fixed height container
 
-## Done
-- [x] Auth config + schema generated + db push
-- [x] Game schema: games, players, game_events
-- [x] Engine (engine.ts) + store helpers (store.ts)
-- [x] Auth middleware
-- [x] Game routes (routes/games.ts): create, join, seat, start, get, list, play, end-turn
+## 2. Hearthstone card UX
+- Click card = select/highlight (lift + glow, no play yet)
+- Clicked again = deselect
+- "PLAY" button appears when card is selected (non-target) OR user confirms target
+- For target cards: select card → click rival chip → plays
+- Advance card no longer auto-plays on click
 
-## Done (cont.)
-- [x] api/index.ts wired (auth mounted before basePath, games routed)
-- [x] Web client: api.ts, auth.ts, provider w/ react-query
-- [x] styles.css design system (tokens, fonts, panels, buttons, animations)
-- [x] Pages: landing/auth, lobby, game (waiting room + table + win overlay)
-- [x] Components: GameCard, Track, HorseSprite, EventLog, PlayerChips
-- [x] Pixel horse + turtle sprites (bg removed, hue-rotate per color)
-- [x] build passes; full API flow tested (create/join/start/advance/block/turn rotation)
-- [x] Verified UI screenshots (landing + game)
+## 3. New cards (5 new types)
+| Card | Effect | Target |
+|---|---|---|
+| `swap` | Swap positions with any rival (Monopoly: pay to move) | yes |
+| `shield` | Immune to block/turtle/steal for 1 turn | no |
+| `sabotage` | Set a rival back 3 squares | yes |
+| `nitro` | Next base step is doubled for you | no |
+| `tax` | All rivals lose 1 card from hand | no |
 
-## TODO
-- [ ] final build + deliver
+## Files to touch
+- `engine.ts` — CardType union, CARD_META, DRAW_WEIGHTS
+- `lib/game.ts` (client) — CardType, CARD_META mirror
+- `logic.ts` — resolveCard branches for 5 new types
+- `bot.ts` — priority logic for new cards
+- `schema.ts` — add `shieldActive`, `nitroActive` booleans to players
+- DB migration — ALTER TABLE for 2 new columns
+- `game-card.tsx` — new icon mapping
+- `event-log.tsx` — collapsed/expandable feed
+- `game.tsx` — Hearthstone UX (select → play button)

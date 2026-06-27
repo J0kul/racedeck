@@ -1,4 +1,4 @@
-export type CardType = "advance" | "block" | "mystery";
+export type CardType = "advance" | "block" | "mystery" | "swap" | "shield" | "sabotage" | "nitro" | "tax";
 export interface Card {
   id: string;
   type: CardType;
@@ -18,19 +18,13 @@ export function colorName(key: string): string {
   return HORSE_COLORS.find((c) => c.key === key)?.name ?? key;
 }
 
-// hue-rotate the mint sprite (base ~150deg green) toward target color.
 export function spriteHue(key: string): number {
   switch (key) {
-    case "mint":
-      return 0;
-    case "rose":
-      return 200; // toward pink/red
-    case "cyan":
-      return 40; // toward cyan/blue
-    case "gold":
-      return -110; // toward amber/yellow
-    default:
-      return 0;
+    case "mint": return 0;
+    case "rose": return 200;
+    case "cyan": return 40;
+    case "gold": return -110;
+    default: return 0;
   }
 }
 
@@ -40,10 +34,10 @@ export const CARD_META: Record<
 > = {
   advance: {
     label: "ADVANCE",
-    short: "+4",
+    short: "+2",
     color: "#3BE3A0",
     glow: "rgba(59,227,160,0.55)",
-    desc: "Gallop 4 squares forward instantly.",
+    desc: "Gallop 2 squares forward instantly.",
     needsTarget: false,
   },
   block: {
@@ -62,6 +56,46 @@ export const CARD_META: Record<
     desc: "Turtle a rival's horse, or steal one of their cards.",
     needsTarget: true,
   },
+  swap: {
+    label: "SWAP",
+    short: "⇄",
+    color: "#F5C451",
+    glow: "rgba(245,196,81,0.55)",
+    desc: "Swap track positions with any rival.",
+    needsTarget: true,
+  },
+  shield: {
+    label: "SHIELD",
+    short: "🛡",
+    color: "#34D3F5",
+    glow: "rgba(52,211,245,0.55)",
+    desc: "Block the next card played against you.",
+    needsTarget: false,
+  },
+  sabotage: {
+    label: "SABOTAGE",
+    short: "-3",
+    color: "#FF7043",
+    glow: "rgba(255,112,67,0.55)",
+    desc: "Knock a rival back 3 squares.",
+    needsTarget: true,
+  },
+  nitro: {
+    label: "NITRO",
+    short: "⚡",
+    color: "#E040FB",
+    glow: "rgba(224,64,251,0.55)",
+    desc: "Your base step is doubled this turn.",
+    needsTarget: false,
+  },
+  tax: {
+    label: "TAX",
+    short: "💸",
+    color: "#FFB300",
+    glow: "rgba(255,179,0,0.55)",
+    desc: "All rivals discard one card from hand.",
+    needsTarget: false,
+  },
 };
 
 export interface PlayerState {
@@ -73,6 +107,9 @@ export interface PlayerState {
   isReady: boolean;
   skipNextTurn: boolean;
   turtleTurns: number;
+  shieldActive: boolean;
+  nitroActive: boolean;
+  cardsPlayedThisTurn: number;
   finished: boolean;
   finishRank: number | null;
   isSelf: boolean;
@@ -106,7 +143,7 @@ export interface GameStateResp {
     turnCount: number;
     winnerPlayerId: string | null;
     turnStartedAt: number | null;
-    turnDuration: number; // seconds, default 60
+    turnDuration: number;
   };
   players: PlayerState[];
   events: GameEvent[];
