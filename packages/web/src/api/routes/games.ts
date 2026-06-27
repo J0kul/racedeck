@@ -36,6 +36,7 @@ function publicPlayer(p: PlayerRow, selfUserId: string) {
     isBot: p.isBot,
     skipNextTurn: p.skipNextTurn,
     turtleTurns: p.turtleTurns,
+    cardsPlayedThisTurn: p.cardsPlayedThisTurn,
     finished: p.finished,
     finishRank: p.finishRank,
     isSelf,

@@ -25,7 +25,7 @@ function leaderOf(players: PlayerRow[], selfId: string): PlayerRow | null {
 async function runOneBotTurn(gameId: string, botId: string) {
   // A bot may play multiple cards in a turn (e.g. block the leader AND +4 itself).
   // Ruthless: keep playing while it has impactful cards, cap to avoid loops.
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 2; i++) {
     const game = await getGame(gameId);
     if (!game || game.status !== "playing") return;
     const players = await getPlayers(gameId);

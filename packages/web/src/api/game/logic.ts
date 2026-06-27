@@ -38,16 +38,17 @@ export async function resolveCard(
   const hand = parseHand(me);
   const card = hand.find((x) => x.id === cardId);
   if (!card) return { ok: false, message: "Card not in hand." };
+  if (me.cardsPlayedThisTurn >= 2) return { ok: false, message: "Max 2 cards per turn." };
 
   let stolenCard: Card | undefined;
 
   if (card.type === "advance") {
-    const newPos = Math.min(me.position + 4, game.trackLength);
+    const newPos = Math.min(me.position + 2, game.trackLength);
     await db.update(schema.players).set({ position: newPos }).where(eq(schema.players.id, me.id));
     await logEvent(gameId, {
       type: "advance",
       actorPlayerId: me.id,
-      message: `${me.name} plays +4 ADVANCE and surges to ${newPos}!`,
+      message: `${me.name} plays +2 ADVANCE and surges to ${newPos}!`,
       payload: { to: newPos },
     });
   } else if (card.type === "block") {
@@ -107,12 +108,14 @@ export async function resolveCard(
     }
   }
 
-  // remove played card, add stolen, draw replacement
+  // remove played card, add stolen, draw replacement; track cards played this turn
   const freshMe = (await getPlayers(gameId)).find((p) => p.id === me.id)!;
   const newHand = parseHand(freshMe).filter((x) => x.id !== cardId);
   if (stolenCard) newHand.push(stolenCard);
   newHand.push(drawCard());
-  await db.update(schema.players).set({ hand: JSON.stringify(newHand) }).where(eq(schema.players.id, me.id));
+  await db.update(schema.players)
+    .set({ hand: JSON.stringify(newHand), cardsPlayedThisTurn: freshMe.cardsPlayedThisTurn + 1 })
+    .where(eq(schema.players.id, me.id));
 
   const meAfter = (await getPlayers(gameId)).find((p) => p.id === me.id)!;
   await checkWin(gameId, meAfter);
@@ -211,6 +214,10 @@ export async function advanceTurn(gameId: string) {
   const nextPid = order[idx];
   const np = (await getPlayers(gameId)).find((x) => x.id === nextPid);
   if (np) {
+    // reset card-play counter for the incoming player
+    await db.update(schema.players)
+      .set({ cardsPlayedThisTurn: 0 })
+      .where(eq(schema.players.id, np.id));
     await logEvent(gameId, { type: "turn", actorPlayerId: np.id, message: `${np.name}'s turn.` });
   }
   // stamp the turn clock so the 60s timer knows when this turn began

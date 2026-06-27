@@ -215,6 +215,9 @@ export default function GamePage() {
   // ---------- GAME TABLE ----------
   const selected = me?.hand?.find((c) => c.id === selectedCard);
   const needsTarget = selected ? CARD_META[selected.type].needsTarget : false;
+  const cardsPlayed = me?.cardsPlayedThisTurn ?? 0;
+  const cardsRemaining = Math.max(0, 2 - cardsPlayed);
+  const cardLimitReached = cardsPlayed >= 2;
   const targetable = new Set(
     data.players.filter((p) => !p.isSelf && !p.finished).map((p) => p.id)
   );
@@ -294,6 +297,14 @@ export default function GamePage() {
           {needsTarget && selectedCard && isMyTurn && (
             <p className="mb-1 text-center text-sm text-gold">Pick a rival above to {selected?.type === "block" ? "block" : "hit with the mystery"} →</p>
           )}
+          {isMyTurn && (
+            <p className="mb-1 text-center text-xs text-ink-dim">
+              Cards this turn:{" "}
+              <span className={cardsRemaining === 0 ? "text-rose font-bold" : "text-mint font-bold"}>
+                {cardsRemaining} / 2 remaining
+              </span>
+            </p>
+          )}
           <div className="flex min-h-[150px] items-end justify-center gap-1 pt-6">
             <AnimatePresence>
               {(me?.hand ?? []).map((card, i) => (
@@ -303,9 +314,9 @@ export default function GamePage() {
                   index={i}
                   total={me?.hand?.length ?? 1}
                   selected={selectedCard === card.id}
-                  disabled={!isMyTurn || playMut.isPending}
+                  disabled={!isMyTurn || playMut.isPending || cardLimitReached}
                   onClick={() => {
-                    if (!isMyTurn) return;
+                    if (!isMyTurn || cardLimitReached) return;
                     if (CARD_META[card.type].needsTarget) {
                       setSelectedCard(selectedCard === card.id ? null : card.id);
                     } else {
@@ -332,7 +343,7 @@ export default function GamePage() {
             )}
           </div>
           <p className="mt-2 text-center text-xs text-ink-dim">
-            Tip: cards are bonus actions. Ending your turn moves your horse <b>+{data.game.baseStep}</b> (turtled horses stay put).
+            Tip: cards are bonus actions (max 2/turn). Advance = +2 squares. Ending your turn moves your horse <b>+{data.game.baseStep}</b> (turtled horses stay put).
           </p>
         </div>
       </div>

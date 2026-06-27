@@ -42,6 +42,7 @@ export const players = sqliteTable("players", {
   isBot: integer("is_bot", { mode: "boolean" }).notNull().default(false),
   skipNextTurn: integer("skip_next_turn", { mode: "boolean" }).notNull().default(false),
   turtleTurns: integer("turtle_turns").notNull().default(0), // >0 = slowed
+  cardsPlayedThisTurn: integer("cards_played_this_turn").notNull().default(0),
   finished: integer("finished", { mode: "boolean" }).notNull().default(false),
   finishRank: integer("finish_rank"),
   connectedAt: integer("connected_at", { mode: "timestamp" })
